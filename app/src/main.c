@@ -4,6 +4,7 @@
  *  Created on: 16 ao�t 2018
  *      Author: Laurent
  */
+#define
 
 #include "stm32f0xx.h"
 #include "main.h"
@@ -17,7 +18,17 @@
  */
 
 static uint8_t 	SystemClock_Config	(void);
+void ActivateActuator(uint8_t bit);
+void DeactivateActuator(uint8_t bit);
 
+// Global variable to store the actuator states
+static uint32_t actuator_state = 0;
+
+// FreeRTOS tasks
+void  vTaskUp(void *pvParameters);
+
+// FreeRTOS task handles
+xTaskHandle vTaskUp_handle;
 
 /*
  * Project Entry Point
@@ -37,6 +48,24 @@ int main(void)
 	my_printf("\r\nConsole Ready!\r\n");
 	my_printf("SYSCLK = %d Hz\r\n", SystemCoreClock);
 
+	// Start Trace Recording
+	xTraceEnable(TRC_START);
+
+	xTaskCreate(vTaskUp, "vTaskUp", 128, NULL, 1, &vTaskUp_handle);
+
+	vTaskStartScheduler();
+
+	// Loop forever
+	while(1)
+	{
+		// The program should never be here...
+	}
+}
+
+/*
+ * Task_Up
+ */
+void  vTaskUp(void *pvParameters){
 	// Read all states from the scene
 	FACTORY_IO_update();
 
@@ -45,25 +74,32 @@ int main(void)
 
 	// Start conveyor A[0] = 1
 	my_printf("Starting Conveyor\r\n");
-	FACTORY_IO_Actuators_Set(0b0000000000000000000000000001);
+	ActivateActuator(2);
 
 	// Wait for sensor S[1] = 0 (optical barrier)
-	my_printf("Waiting for sensor...\r\n");
-	while (FACTORY_IO_Sensors_Get(0b0000000000000000000000000010) == 1);
+	//my_printf("Waiting for sensor...\r\n");
+	//while (FACTORY_IO_Sensors_Get(0b0000000000000000000000000010) == 1);
 
 	// Stop conveyor A[0] = 0
-	my_printf("Stop!\r\n");
-	FACTORY_IO_Actuators_Set(0x00000000);
-
-	// Loop forever
-	while(1)
-	{
-		// LED blinking
-		BSP_LED_Toggle();
-		delay_ms(100);
-	}
+	//my_printf("Stop!\r\n");
+	//FACTORY_IO_Actuators_Set(0x00000000);
 }
 
+
+
+// Function to activate a specific actuator without modifying others
+void ActivateActuator(uint8_t bit)
+{
+    actuator_state |= (1 << bit); // Set the specific bit to 1
+    FACTORY_IO_Actuators_Set(actuator_state);
+}
+
+// Function to deactivate a specific actuator without modifying others
+void DeactivateActuator(uint8_t bit)
+{
+    actuator_state &= ~(1 << bit); // Set the specific bit to 0
+    FACTORY_IO_Actuators_Set(actuator_state);
+}
 
 
 /*
