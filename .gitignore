@@ -1,0 +1,34 @@
+/Debug/
+# Arquivos de objeto, binarios e bibliotecas
+*.o
+*.out
+*.a
+*.so
+*.exe
+*.dll
+
+# Arquivos de depuracao e logs
+*.dSYM/
+*.log
+*.stackdump
+
+# Arquivos temporarios do editor
+*.swp
+*.swo
+*.bak
+*~
+
+# Arquivos do compilador
+*.d
+*.gcda
+*.gcno
+*.gcov
+
+# CMake e Makefiles
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+
+# Arquivos de build
+/build/
