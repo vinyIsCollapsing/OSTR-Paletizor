@@ -10,6 +10,9 @@
 
 #include "stm32f0xx.h"
 #include "main.h"
+#include "factory_io.h"
+
+extern uint8_t tx_dma_buffer[FRAME_LENGTH];
 
 /*
  * LED driver functions

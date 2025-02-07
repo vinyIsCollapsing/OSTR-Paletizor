@@ -100,30 +100,78 @@ void HardFault_Handler(void)
 /******************************************************************************/
 
 
-// Declare needed external variables here
-// ...
+/**
+  * This function handles EXTI line 13 interrupt request.
+  */
 
-void TIM6_DAC_IRQHandler()
-{
-	// Declare local variables here
-	// ...
 
-	// Test for TIM6 update pending interrupt
-	if ((TIM6->SR & TIM_SR_UIF) == TIM_SR_UIF)
-	{
-		// Clear pending interrupt flag
-		TIM6->SR &= ~TIM_SR_UIF;
+extern xSemaphoreHandle xSem_UART_TC;
 
-		// Do what you have to do here
-		// ...
+void USART2_IRQHandler(){
+	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+	// Test for TC pending interrupt
+	if ( USART2->ISR & USART_ISR_TC ) {
+		// Clear pending bit by writing a '1'
+		// USART2->CR1 = USART_ISR_TCIE;
+		USART2->ICR |= USART_ICR_TCCF;
+		// Release the semaphore
+		xSemaphoreGiveFromISR(xSem_UART_TC, &xHigherPriorityTaskWoken);
+		// Perform a context switch to the waiting task
+		portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 	}
 }
 
+extern xSemaphoreHandle	xSem_DMA_TC;
+
+void DMA1_Channel4_5_6_7_IRQHandler()
+{
+	/*
+	// Test for Channel 5 Half Transfer
+	if ((DMA1->ISR & DMA_ISR_HTIF5) == DMA_ISR_HTIF5)
+	{
+		// Clear the interrupt pending bit
+		DMA1->IFCR |= DMA_IFCR_CHTIF5;
+		// Set global variable
+		xSem_DMA_TC = 1;
+	}
+	// Test for Channel 5 Transfer Complete
+	if ((DMA1->ISR & DMA_ISR_TCIF5) == DMA_ISR_TCIF5)
+	{
+		// Clear the interrupt pending bit
+		DMA1->IFCR |= DMA_IFCR_CTCIF5;
+		// Set global variable
+		xSem_DMA_TC = 2;
+	}
+	*/
+	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+	// Test for TC pending interrupt
+	if ( DMA1->ISR & DMA_ISR_TCIF4 ) {
+		// Clear pending bit by writing a '1'
+		// USART2->CR1 = USART_ISR_TCIE;
+		DMA1->IFCR |= DMA_IFCR_CTCIF4;
+		// Release the semaphore
+		xSemaphoreGiveFromISR(xSem_DMA_TC, &xHigherPriorityTaskWoken);
+		// Perform a context switch to the waiting task
+		portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
+	}
+}
 
 /**
-  * @}
-  */ 
+  * @brief  This function handles PPP interrupt request.
+  * @param  None
+  * @retval None
+  */
+/*void PPP_IRQHandler(void)
+{
+}*/
+
 
 /**
   * @}
   */
+
+/**
+  * @}
+  */
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

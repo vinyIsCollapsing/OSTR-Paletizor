@@ -6,7 +6,9 @@
  */
 
 #include "bsp.h"
-#include "factory_io.h"
+// #include "factory_io.h"
+
+uint8_t tx_dma_buffer[FRAME_LENGTH];
 
 /*
  * BSP_LED_Init()
@@ -154,6 +156,40 @@ void BSP_Console_Init()
 	USART2->CR1 |= USART_CR1_TE | USART_CR1_RE;
 
 
+	// Setur TX on DMA Channel 4
+	// Enable TX (TC) interrupt
+	USART2->CR1 |= USART_CR1_TCIE;
+
+	// Enable USART2
+	USART2->CR1 |= USART_CR1_UE;
+
+	// Setup TX on DMA Channel 4
+	// Start DMA clock
+	RCC->AHBENR |= RCC_AHBENR_DMA1EN;
+	// Reset DMA1 Channel 4 configuration
+	DMA1_Channel4->CCR = 0x00000000;
+	// Set direction Memory -> Peripheral
+	DMA1_Channel4->CCR |= DMA_CCR_DIR;
+	// Peripheral is USART2 TDR
+	DMA1_Channel4->CPAR = (uint32_t) &USART2->TDR;
+	// Peripheral data size is 8-bit (byte)
+	DMA1_Channel4->CCR |= (0x00 <<DMA_CCR_PSIZE_Pos);
+	// Disable auto-increment Peripheral address
+	DMA1_Channel4->CCR &= ~DMA_CCR_PINC;
+	// Memory is tx_dma_buffer
+	DMA1_Channel4->CMAR = (uint32_t) tx_dma_buffer;
+	// Memory data size is 8-bit (byte)
+	DMA1_Channel4->CCR |= (0x00 <<DMA_CCR_MSIZE_Pos);
+	// Enable auto-increment Memory address
+	DMA1_Channel4->CCR |= DMA_CCR_MINC;
+	// Set Memory Buffer size
+	DMA1_Channel4->CNDTR = 0;
+	// DMA mode is not circular
+	DMA1_Channel4->CCR &= ~DMA_CCR_CIRC;
+	// Enable transfer complete interrupt
+	DMA1_Channel4->CCR |= DMA_CCR_TCIE;
+	// Enable DMA1 Channel 4
+	//DMA1_Channel4->CCR |= DMA_CCR_EN;
 
 	// Setup RX on DMA Channel 5
 

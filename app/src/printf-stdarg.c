@@ -27,8 +27,11 @@
 #define putchar(c) outbyte(c)
 */
 
-#include <stdarg.h>
-#include "stm32f0xx.h"
+#include "printf-stdarg.h"
+
+xSemaphoreHandle xSem_UART_TC;
+xSemaphoreHandle xSem_DMA_TC;
+xSemaphoreHandle uartMutex;
 
 static void printchar(char **str, int c)
 {
