@@ -8,10 +8,10 @@
 #ifndef INC_READTASK_H_
 #define INC_READTASK_H_
 
-#define MAX_SUBSCRIBERS 12
+#define MAX_SUBSCRIBERS 20
 #define QUEUE_LENGTH 10
-#define SENSOR_TABLE_SIZE 12
-#define MAX_SEMAPHORE 12
+#define SENSOR_TABLE_SIZE 20
+#define MAX_SEMAPHORE 20
 
 #define SUBSCRIPTION_EMPTY 0xFF		// Correcao para o caso do sensor 0
 
