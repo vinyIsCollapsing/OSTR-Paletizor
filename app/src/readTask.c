@@ -4,19 +4,22 @@
  *  Created on: Jan 13, 2025
  *      Author: vinic
  */
+#include "main.h"
 #include "readTask.h"
 
 static xTaskHandle vTaskPub_handle;
 static xQueueHandle xSubscribeQueue;
-static xSemaphoreHandle ledMutex;
+
 xSemaphoreHandle sems[MAX_SEMAPHORE];
 
 uint8_t sensor_states[SENSOR_TABLE_SIZE] = {0};
+extern uint8_t	rx_dma_buffer[FRAME_LENGTH];
 
 static void updateSubs(subscribe_message_t *subs, subscribe_message_t *new_sub);
 static void print_subscription_table(subscribe_message_t *subs);
-static void uartSensor(uint8_t *sensors);
-static void publish(subscribe_message_t *subs, uint8_t *sensors);
+static void publish(subscribe_message_t *subs);
+
+
 
 BaseType_t vTaskPubInit(){
 	size_t i;
@@ -24,7 +27,6 @@ BaseType_t vTaskPubInit(){
     // Create the subscription queue
     xSubscribeQueue = xQueueCreate(QUEUE_LENGTH, sizeof(subscribe_message_t));
 
-	ledMutex = xSemaphoreCreateMutex();
 	for(i = 0; i < MAX_SEMAPHORE; i++) {
 		sems[i] = xSemaphoreCreateBinary();
 	}
@@ -50,9 +52,9 @@ void vTask_Pub(void *pvParameters){
 
 	// Reseting the message
 	for(i = 0; i < MAX_SUBSCRIBERS; i++) {
-	 	subscription_table[i].sem_id = 0;
-	   	subscription_table[i].sensor_id = 0;
-	   	subscription_table[i].sensor_state = 0;
+	 	subscription_table[i].sem_id = SUBSCRIPTION_EMPTY;
+	   	subscription_table[i].sensor_id = SUBSCRIPTION_EMPTY;
+	   	subscription_table[i].sensor_state = SUBSCRIPTION_EMPTY;
 	}
 
 	for(i = 0; i < SENSOR_TABLE_SIZE; i++) {
@@ -64,12 +66,9 @@ void vTask_Pub(void *pvParameters){
 	  	if(xQueueReceive(xSubscribeQueue, &msg, 0)){
 	  		updateSubs(subscription_table, &msg);
 	   		print_subscription_table(subscription_table);
-	   	} else {
-	   		my_printf(".");
 	   	}
 
-	   	uartSensor(sensor_states);
-		publish(subscription_table, sensor_states);
+		publish(subscription_table);
 
 		vTaskDelayUntil(&xLastWakeTime, xFrequency);
 	}
@@ -93,6 +92,7 @@ static void updateSubs(subscribe_message_t *subs, subscribe_message_t *new_sub) 
     my_printf("Subscribing...");
 
     // Check for duplicates
+    /*
     for (i = 0; i < MAX_SUBSCRIBERS; i++) {
         if (subs[i].sem_id == new_sub->sem_id &&
             subs[i].sensor_id == new_sub->sensor_id &&
@@ -101,10 +101,11 @@ static void updateSubs(subscribe_message_t *subs, subscribe_message_t *new_sub) 
             return;
         }
     }
+    */
 
     // Add the new subscription to the first available slot
     for (i = 0; i < MAX_SUBSCRIBERS; i++) {
-        if (subs[i].sem_id == 0) {
+        if (subs[i].sensor_id == SUBSCRIPTION_EMPTY) {
             subs[i] = *new_sub;
             my_printf("Adding subscription in slot [%d]\r\n", i);
             return;
@@ -121,44 +122,32 @@ static void print_subscription_table(subscribe_message_t *subs) {
     }
 }
 
-static void uartSensor(uint8_t *sensors)
+
+static void publish(subscribe_message_t *subs)
 {
-	uint8_t rx;
-	size_t i;
-	if( (USART2->ISR & USART_ISR_RXNE) != USART_ISR_RXNE ) return;
-	rx = USART2->RDR;
-	switch(rx) {
-	case 'a': sensors[1] = 0; break;
-	case 'b': sensors[1] = 1; break;
-	case 'c': sensors[2] = 0; break;
-	case 'd': sensors[2] = 1; break;
-	}
-	my_printf("sensors = [ ");
-	for(i = 1; i <= SENSOR_TABLE_SIZE; i++) {
-		my_printf("%d ", sensors[i]);
-	}
-	my_printf("]\r\n");
+    size_t i;
+
+    // Percorre todos os slots da tabela de inscrições
+    for (i = 0; i < MAX_SUBSCRIBERS; i++) {
+        // Se o slot estiver vazio, pula para o próximo
+        if (subs[i].sem_id == SUBSCRIPTION_EMPTY)
+            continue;
+
+        uint8_t sensor_id = subs[i].sensor_id;
+        // Obtém o estado atual do sensor usando a máscara (1 << sensor_id)
+        uint8_t current_state = FACTORY_IO_Sensors_Get(1 << sensor_id);
+
+        // Se o sensor ainda estiver no estado esperado, passa para o próximo slot
+        if (current_state == subs[i].sensor_state)
+            continue;
+
+        // Se houve mudança, notifica o assinante liberando o semáforo correspondente
+        xSemaphoreGive(sems[subs[i].sem_id]);
+        my_printf("Published to subscription in slot [%d]\r\n", i);
+
+        // Remove a inscrição, liberando o slot para uma nova assinatura
+        subs[i].sem_id = SUBSCRIPTION_EMPTY;
+        subs[i].sensor_id = SUBSCRIPTION_EMPTY;
+        subs[i].sensor_state = SUBSCRIPTION_EMPTY;
+    }
 }
-
-static void publish(subscribe_message_t *subs, uint8_t *sensors) {
-	size_t i;
-	uint8_t sensor, sem;
-
-	for(i = 0; i < MAX_SUBSCRIBERS; i++) {
-		if(subs[i].sem_id == 0) continue;
-
-		sensor = subs[i].sensor_id;
-		sem = subs[i].sem_id;
-
-		if(sensors[sensor] == subs[i].sensor_state) continue;
-
-		xSemaphoreGive(sems[sem]);
-
-		my_printf("published\r\n");
-
-		subs[i].sem_id = 0;
-		subs[i].sensor_id = 0;
-		subs[i].sensor_state = 0;
-	}
-}
-

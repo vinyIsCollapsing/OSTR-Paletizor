@@ -8,10 +8,12 @@
 #ifndef INC_READTASK_H_
 #define INC_READTASK_H_
 
-#define MAX_SUBSCRIBERS 4
+#define MAX_SUBSCRIBERS 12
 #define QUEUE_LENGTH 10
-#define SENSOR_TABLE_SIZE 2
-#define MAX_SEMAPHORE 10
+#define SENSOR_TABLE_SIZE 12
+#define MAX_SEMAPHORE 12
+
+#define SUBSCRIPTION_EMPTY 0xFF		// Correcao para o caso do sensor 0
 
 #include <stddef.h>
 #include <stdint.h>
@@ -27,6 +29,7 @@
 #include "semphr.h"
 #include "queue.h"
 #include "event_groups.h"
+#include "factory_io.h"
 
 #include "printf-stdarg.h"
 

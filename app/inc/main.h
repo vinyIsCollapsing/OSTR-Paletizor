@@ -24,6 +24,20 @@
 #include "event_groups.h"
 #include "stream_buffer.h"
 
+// Actuators
+#define CARTON              0
+#define TAPISCARTON         1
+#define BLOCAGE             2
+#define POUSSOIR			4
+#define TAPISCARTONPALET    12
+#define CHARGERPALET		16
+
+// Sensors
+#define CARTONDISTRIBUE     0
+#define CARTONENVOYE        1
+#define ENTREEPALETIZOR     2
+#define LIMITEPOUSSOIR		4
+
 // Global functions
 int my_printf	(const char *format, ...);
 int my_sprintf	(char *out, const char *format, ...);

@@ -120,9 +120,7 @@ void USART2_IRQHandler(){
 		portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 	}
 }
-
 extern xSemaphoreHandle	xSem_DMA_TC;
-
 void DMA1_Channel4_5_6_7_IRQHandler()
 {
 	/*

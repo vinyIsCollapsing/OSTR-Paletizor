@@ -4,20 +4,6 @@
  *  Created on: 16 août 2018
  *      Author: Laurent
  */
-// Actuators
-#define CARTON              0
-#define TAPISCARTON         1
-#define BLOCAGE             2
-#define POUSSOIR			4
-#define TAPISCARTONPALET    12
-#define CHARGERPALET		16
-
-// Sensors
-#define CARTONDISTRIBUE     0
-#define CARTONENVOYE        1
-#define ENTREEPALETIZOR     2
-#define LIMITEPOUSSOIR		4
-
 #include "stm32f0xx.h"
 #include "main.h"
 #include "bsp.h"
@@ -100,75 +86,94 @@ void vTaskUp(void *pvParameters)
 	ActivateActuator(BLOCAGE);
 	while(1)
     {
-		while(FACTORY_IO_Sensors_Get(1 << CARTONDISTRIBUE) == 1);
+		// while(FACTORY_IO_Sensors_Get(1 << CARTONDISTRIBUE) == 1);
+		// Espera pelo evento no sensor CARTONDISTRIBUE (saída de estado 1)
+		my_printf("Esperando o CARTON DISTRIBUE\r\n");
+		subscribe(CARTONDISTRIBUE, CARTONDISTRIBUE, 1);  // Inscreve para ser notificado quando o sensor sair do estado 1
+		xSemaphoreTake(sems[CARTONDISTRIBUE], portMAX_DELAY);
 		ActivateActuator(TAPISCARTON);
-		while(FACTORY_IO_Sensors_Get(1 << CARTONENVOYE) == 1);
+		my_printf("CARTON DISTRIBUE liberado\r\n");
+
+		// Espera pelo sensor CARTONENVOYE sair do estado 1 (fica 1 e deve mudar para 0)
+		my_printf("Esperando mudança de estado do CARTONENVOYE para 0\r\n");
+		subscribe(CARTONENVOYE, CARTONENVOYE, 1);  // Aguarda a transição de 1 para 0
+		xSemaphoreTake(sems[CARTONENVOYE], portMAX_DELAY);
 		ActivateActuator(TAPISCARTONPALET);
 		my_printf("Primeira caixa\r\n");
-		while(FACTORY_IO_Sensors_Get(1 << CARTONENVOYE) == 0);
+
+		// Espera pelo sensor CARTONENVOYE entrar no estado 1 (ou seja, de 0 para 1)
+		my_printf("Esperando mudança de estado do CARTONENVOYE para 1\r\n");
+		subscribe(CARTONENVOYE, CARTONENVOYE, 0);  // Aguarda a transição de 0 para 1
+		xSemaphoreTake(sems[CARTONENVOYE], portMAX_DELAY);
 		my_printf("Primeira caixa livre\r\n");
-		while(FACTORY_IO_Sensors_Get(1 << CARTONENVOYE) == 1);
+
+		// Espera pelo sensor CARTONENVOYE sair do estado 1 para o caso da segunda caixa
+		my_printf("Esperando mudança de estado do CARTONENVOYE para 0 (segunda caixa)\r\n");
+		subscribe(CARTONENVOYE, CARTONENVOYE, 1);  // Aguarda a transição de 1 para 0
+		xSemaphoreTake(sems[CARTONENVOYE], portMAX_DELAY);
 		DeactivateActuator(CARTON);
 		my_printf("Segunda caixa\r\n");
-		while(FACTORY_IO_Sensors_Get(1 << CARTONENVOYE) == 0);
+
+		// Espera pelo sensor CARTONENVOYE entrar no estado 1 (segunda caixa livre)
+		my_printf("Esperando mudança de estado do CARTONENVOYE para 1 (segunda caixa livre)\r\n");
+		subscribe(CARTONENVOYE, CARTONENVOYE, 0);  // Aguarda a transição de 0 para 1
+		xSemaphoreTake(sems[CARTONENVOYE], portMAX_DELAY);
 		my_printf("Segunda caixa livre\r\n");
 
-		while(FACTORY_IO_Sensors_Get(1 << ENTREEPALETIZOR) == 1);
+
+		// Espera pelo sensor ENTREEPALETIZOR sair do estado 1 (primeira caixa no bloqueado)
+		my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 0 (primeira caixa no bloqueado)\r\n");
+		subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 1);
+		xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
 		my_printf("Primeira caixa no bloqueado\r\n");
-		while(FACTORY_IO_Sensors_Get(1 << ENTREEPALETIZOR) == 0);
+
+		// Espera pelo sensor ENTREEPALETIZOR entrar no estado 1 (primeira caixa no bloqueado esperando segunda caixa)
+		my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 1 (primeira caixa no bloqueado esperando segunda caixa)\r\n");
+		subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 0);
+		xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
 		my_printf("Primeira caixa no bloqueado esperando segunda caixa\r\n");
-		while(FACTORY_IO_Sensors_Get(1 << ENTREEPALETIZOR) == 1);
+
+		// Espera pelo sensor ENTREEPALETIZOR sair do estado 1 (segunda caixa no bloqueado)
+		my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 0 (segunda caixa no bloqueado)\r\n");
+		subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 1);
+		xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
 		my_printf("Segunda caixa no bloqueado\r\n");
+
+		// Após a notificação, procede com as ações correspondentes
 		DeactivateActuator(BLOCAGE);
 		my_printf("Barreira abaixada\r\n");
 		ActivateActuator(CHARGERPALET);
-		while(FACTORY_IO_Sensors_Get(1 << ENTREEPALETIZOR) == 0);
+
+		// Espera pelo sensor ENTREEPALETIZOR entrar no estado 1 (segunda caixa fora bloqueado)
+		my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 1 (segunda caixa fora bloqueado)\r\n");
+		subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 0);
+		xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
 		my_printf("Segunda caixa fora bloqueado\r\n");
+
 		vTaskDelay(750);
 		ActivateActuator(BLOCAGE);
 		my_printf("Barreira levantada\r\n");
-
 
 		my_printf("Duas caixas no pistao\r\n");
 		vTaskDelay(600);
 		ActivateActuator(POUSSOIR);
 		my_printf("Pistao empurra\r\n");
-		while(FACTORY_IO_Sensors_Get(1 << LIMITEPOUSSOIR) == 1);
-		my_printf("Pistao no final\r\n");
-		while(FACTORY_IO_Sensors_Get(1 << LIMITEPOUSSOIR) == 0);
-		my_printf("Pistao no inicio\r\n");
-		DeactivateActuator(POUSSOIR);
 
+		// Espera pelo sensor LIMITEPOUSSOIR sair do estado 1 (pistão atinge o final)
+		my_printf("Esperando mudança de estado do LIMITEPOUSSOIR para 0 (pistao no final)\r\n");
+		subscribe(LIMITEPOUSSOIR, LIMITEPOUSSOIR, 1);
+		xSemaphoreTake(sems[LIMITEPOUSSOIR], portMAX_DELAY);
+		my_printf("Pistao no final\r\n");
+
+		// Espera pelo sensor LIMITEPOUSSOIR entrar no estado 1 (pistão volta ao início)
+		my_printf("Esperando mudança de estado do LIMITEPOUSSOIR para 1 (pistao no inicio)\r\n");
+		subscribe(LIMITEPOUSSOIR, LIMITEPOUSSOIR, 0);
+		xSemaphoreTake(sems[LIMITEPOUSSOIR], portMAX_DELAY);
+		my_printf("Pistao no inicio\r\n");
+
+		DeactivateActuator(POUSSOIR);
 		ActivateActuator(CARTON);
 
-
-
-		//while(FACTORY_IO_Sensors_Get(1 << ENTREEPALETIZOR) == 0)
-		//DeactivateActuator(BLOCAGE);
-		//ActivateActuator(CHARGERPALET);
-		// while(FACTORY_IO_Sensors_Get(1 << ENTREEPALETIZOR) == 1)
-		// ActivateActuator(BLOCAGE);
-		/*
-        if(IsSensorActive(CARTONDISTRIBUE) && IsSensorActive(CARTONENVOYE)){
-        	my_printf("Creation du Carton\r\n");
-        	ActivateActuator(CARTON);
-
-        }
-        while(IsSensorActive(ENTREEPALETIZOR) == 0);
-    	DeactivateActuator(BLOCAGE);
-    	ActivateActuator(CHARGERPALET);
-    	ActivateActuator(BLOCAGE);
-
-        if (!IsSensorActive(CARTONDISTRIBUE))
-
-        ActivateActuator(TAPISCARTON);
-        if (!IsSensorActive(CARTONENVOYE));
-
-        DeactivateActuator(CARTON);
-        ActivateActuator(TAPISCARTONPALET);
-        if(IsSensorActive(ENTREEPALETIZOR));
-        ActivateActuator(BLOCAGE);
-        */
     }
 }
 
