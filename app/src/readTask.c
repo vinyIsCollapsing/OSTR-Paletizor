@@ -13,7 +13,6 @@ static xQueueHandle xSubscribeQueue;
 xSemaphoreHandle sems[MAX_SEMAPHORE];
 
 uint8_t sensor_states[SENSOR_TABLE_SIZE] = {0};
-extern uint8_t	rx_dma_buffer[FRAME_LENGTH];
 
 static void updateSubs(subscribe_message_t *subs, subscribe_message_t *new_sub);
 static void print_subscription_table(subscribe_message_t *subs);
@@ -92,7 +91,7 @@ static void updateSubs(subscribe_message_t *subs, subscribe_message_t *new_sub) 
     my_printf("Subscribing...");
 
     // Check for duplicates
-    /*
+
     for (i = 0; i < MAX_SUBSCRIBERS; i++) {
         if (subs[i].sem_id == new_sub->sem_id &&
             subs[i].sensor_id == new_sub->sensor_id &&
@@ -101,7 +100,7 @@ static void updateSubs(subscribe_message_t *subs, subscribe_message_t *new_sub) 
             return;
         }
     }
-    */
+
 
     // Add the new subscription to the first available slot
     for (i = 0; i < MAX_SUBSCRIBERS; i++) {

@@ -18,16 +18,25 @@ static uint8_t SystemClock_Config(void);
 void ActivateActuator(uint8_t bit);
 void DeactivateActuator(uint8_t bit);
 uint8_t IsSensorActive(uint8_t bit);
+BaseType_t writing(uint8_t on_off, uint8_t actuator);
 
 // Global variable to store the actuator states
 static uint32_t actuator_state = 0;
+typedef struct
+{
+	uint8_t on_off; 		// Turn On or Off
+	uint8_t actuator;		// The desired actuator
+} commande_message_t;
 
 // FreeRTOS tasks
 void vTaskUp(void *pvParameters);
+void vTaskUpDos(void *pvParameters);
+void vTask_Write(void *pvParameters);
 
 // FreeRTOS task handles
 xTaskHandle vTaskUp_handle;
-
+xTaskHandle vTaskUpDos_handle;
+xQueueHandle	 xCommandeQueue;
 // Kernel objects
 xSemaphoreHandle S_Up;  // Semaphore to control vTaskUp
 
@@ -54,11 +63,14 @@ int main(void)
     // Create Semaphore
     S_Up = xSemaphoreCreateBinary();
     vTraceSetSemaphoreName(S_Up, "S_Up");
+    xCommandeQueue = xQueueCreate(MAX_SUBSCRIBERS, sizeof(commande_message_t));
 
     // Initialize readTask and writeTask
     vTaskPubInit();  // readTask initialization
+    xTaskCreate(vTask_Write,   "Task_Write",   256, NULL, 1, NULL);
     // Create the vTaskUp task
     xTaskCreate(vTaskUp, "vTaskUp", 128, NULL, 1, &vTaskUp_handle);
+    xTaskCreate(vTaskUpDos, "vTaskUpDos", 128, NULL, 1, &vTaskUpDos_handle);
 
     vTaskStartScheduler();
 
@@ -80,10 +92,12 @@ void vTaskUp(void *pvParameters)
 	// Wait here for user button
 	while(BSP_PB_GetState() == 0);
 
-	//ActivateActuator(TAPISCARTONPALET);
 
-	ActivateActuator(CARTON);
-	ActivateActuator(BLOCAGE);
+
+	//ActivateActuator(CARTON);
+	writing(1, CARTON);
+	// ActivateActuator(BLOCAGE);
+	writing(1, BLOCAGE);
 	while(1)
     {
 		// while(FACTORY_IO_Sensors_Get(1 << CARTONDISTRIBUE) == 1);
@@ -120,61 +134,100 @@ void vTaskUp(void *pvParameters)
 		xSemaphoreTake(sems[CARTONENVOYE], portMAX_DELAY);
 		my_printf("Segunda caixa livre\r\n");
 
-
-		// Espera pelo sensor ENTREEPALETIZOR sair do estado 1 (primeira caixa no bloqueado)
-		my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 0 (primeira caixa no bloqueado)\r\n");
-		subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 1);
-		xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
-		my_printf("Primeira caixa no bloqueado\r\n");
-
-		// Espera pelo sensor ENTREEPALETIZOR entrar no estado 1 (primeira caixa no bloqueado esperando segunda caixa)
-		my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 1 (primeira caixa no bloqueado esperando segunda caixa)\r\n");
-		subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 0);
-		xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
-		my_printf("Primeira caixa no bloqueado esperando segunda caixa\r\n");
-
-		// Espera pelo sensor ENTREEPALETIZOR sair do estado 1 (segunda caixa no bloqueado)
-		my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 0 (segunda caixa no bloqueado)\r\n");
-		subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 1);
-		xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
-		my_printf("Segunda caixa no bloqueado\r\n");
-
-		// Após a notificação, procede com as ações correspondentes
-		DeactivateActuator(BLOCAGE);
-		my_printf("Barreira abaixada\r\n");
-		ActivateActuator(CHARGERPALET);
-
-		// Espera pelo sensor ENTREEPALETIZOR entrar no estado 1 (segunda caixa fora bloqueado)
-		my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 1 (segunda caixa fora bloqueado)\r\n");
-		subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 0);
-		xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
-		my_printf("Segunda caixa fora bloqueado\r\n");
-
-		vTaskDelay(750);
-		ActivateActuator(BLOCAGE);
-		my_printf("Barreira levantada\r\n");
-
-		my_printf("Duas caixas no pistao\r\n");
-		vTaskDelay(600);
-		ActivateActuator(POUSSOIR);
-		my_printf("Pistao empurra\r\n");
-
-		// Espera pelo sensor LIMITEPOUSSOIR sair do estado 1 (pistão atinge o final)
-		my_printf("Esperando mudança de estado do LIMITEPOUSSOIR para 0 (pistao no final)\r\n");
-		subscribe(LIMITEPOUSSOIR, LIMITEPOUSSOIR, 1);
-		xSemaphoreTake(sems[LIMITEPOUSSOIR], portMAX_DELAY);
-		my_printf("Pistao no final\r\n");
-
-		// Espera pelo sensor LIMITEPOUSSOIR entrar no estado 1 (pistão volta ao início)
-		my_printf("Esperando mudança de estado do LIMITEPOUSSOIR para 1 (pistao no inicio)\r\n");
-		subscribe(LIMITEPOUSSOIR, LIMITEPOUSSOIR, 0);
-		xSemaphoreTake(sems[LIMITEPOUSSOIR], portMAX_DELAY);
-		my_printf("Pistao no inicio\r\n");
-
-		DeactivateActuator(POUSSOIR);
-		ActivateActuator(CARTON);
-
     }
+}
+
+
+void vTaskUpDos(void *pvParameters){
+	// Read all states from the scene
+	FACTORY_IO_update();
+	while(1){
+		// Espera pelo sensor ENTREEPALETIZOR sair do estado 1 (primeira caixa no bloqueado)
+				my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 0 (primeira caixa no bloqueado)\r\n");
+				subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 1);
+				xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
+				my_printf("Primeira caixa no bloqueado\r\n");
+
+				// Espera pelo sensor ENTREEPALETIZOR entrar no estado 1 (primeira caixa no bloqueado esperando segunda caixa)
+				my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 1 (primeira caixa no bloqueado esperando segunda caixa)\r\n");
+				subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 0);
+				xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
+				my_printf("Primeira caixa no bloqueado esperando segunda caixa\r\n");
+
+				// Espera pelo sensor ENTREEPALETIZOR sair do estado 1 (segunda caixa no bloqueado)
+				my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 0 (segunda caixa no bloqueado)\r\n");
+				subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 1);
+				xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
+				my_printf("Segunda caixa no bloqueado\r\n");
+
+				// Após a notificação, procede com as ações correspondentes
+				my_printf("Desativando a barreira\r\n");
+				DeactivateActuator(BLOCAGE);
+				my_printf("Barreira abaixada\r\n");
+				ActivateActuator(CHARGERPALET);
+
+				// Espera pelo sensor ENTREEPALETIZOR entrar no estado 1 (segunda caixa fora bloqueado)
+				my_printf("Esperando mudança de estado do ENTREEPALETIZOR para 1 (segunda caixa fora bloqueado)\r\n");
+				subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 0);
+				xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
+				my_printf("Segunda caixa fora bloqueado\r\n");
+
+				vTaskDelay(750);
+				ActivateActuator(BLOCAGE);
+				my_printf("Barreira levantada\r\n");
+
+				my_printf("Duas caixas no pistao\r\n");
+				vTaskDelay(600);
+				ActivateActuator(POUSSOIR);
+				my_printf("Pistao empurra\r\n");
+
+				// Espera pelo sensor LIMITEPOUSSOIR sair do estado 1 (pistão atinge o final)
+				my_printf("Esperando mudança de estado do LIMITEPOUSSOIR para 0 (pistao no final)\r\n");
+				subscribe(LIMITEPOUSSOIR, LIMITEPOUSSOIR, 1);
+				xSemaphoreTake(sems[LIMITEPOUSSOIR], portMAX_DELAY);
+				my_printf("Pistao no final\r\n");
+
+				// Espera pelo sensor LIMITEPOUSSOIR entrar no estado 1 (pistão volta ao início)
+				my_printf("Esperando mudança de estado do LIMITEPOUSSOIR para 1 (pistao no inicio)\r\n");
+				subscribe(LIMITEPOUSSOIR, LIMITEPOUSSOIR, 0);
+				xSemaphoreTake(sems[LIMITEPOUSSOIR], portMAX_DELAY);
+				my_printf("Pistao no inicio\r\n");
+
+				ActivateActuator(CARTON);
+				DeactivateActuator(POUSSOIR);
+
+	}
+}
+
+void vTask_Write (void *pvParameters)
+{
+	commande_message_t actuator;
+
+	while(1)
+	{
+		// Wait for something in the message Queue
+		xQueueReceive(xCommandeQueue, &actuator, portMAX_DELAY);
+
+		if(actuator.on_off == 1) {
+			// Activate the actuator
+			ActivateActuator(actuator.actuator);
+		}
+
+		if(actuator.on_off == 0) {
+			// Deactivate the actuator
+			DeactivateActuator(actuator.actuator);
+		}
+	}
+}
+
+BaseType_t writing(uint8_t on_off, uint8_t actuator)
+{
+	commande_message_t data = {
+		.on_off = on_off,
+		.actuator = actuator
+	};
+
+	return xQueueSend(xCommandeQueue, &data, 0);
 }
 
 // Function to activate a specific actuator without modifying others
@@ -191,11 +244,6 @@ void DeactivateActuator(uint8_t bit)
     FACTORY_IO_Actuators_Set(actuator_state);
 }
 
-// Function to check if a specific sensor is active (returns 1 if active, 0 if inactive)
-uint8_t IsSensorActive(uint8_t bit)
-{
-    return FACTORY_IO_Sensors_Get(1 << bit);
-}
 
 /*
  * Clock configuration for the Nucleo STM32F072RB board
