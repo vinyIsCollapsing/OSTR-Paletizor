@@ -63,6 +63,12 @@
 #define tapis_fin 20
 #define remover 21
 
+#define TASK_NUM			3
+#define IDX_TASK_UP       	0
+#define IDX_TASK_UPDOS    	1
+#define IDX_TASK_PALETTE  	2
+
+
 
 // Global functions
 int my_printf	(const char *format, ...);

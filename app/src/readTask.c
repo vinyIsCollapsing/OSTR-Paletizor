@@ -69,7 +69,7 @@ void vTask_Pub(void *pvParameters){
 
 		publish(subscription_table);
 
-		// vTaskDelayUntil(&xLastWakeTime, xFrequency);
+		vTaskDelayUntil(&xLastWakeTime, xFrequency);
 	}
 }
 

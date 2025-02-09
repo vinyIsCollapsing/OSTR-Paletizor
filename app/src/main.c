@@ -44,6 +44,11 @@ xQueueHandle	xCommandeQueue;
 // Kernel objects
 xSemaphoreHandle S_Up;  // Semaphore to control vTaskUp
 
+static xSemaphoreHandle txSem[TASK_NUM];
+static xSemaphoreHandle rxSem[TASK_NUM];
+static xSemaphoreHandle taskSem[TASK_NUM];
+
+
 /*
  * Project Entry Point
  */
@@ -61,11 +66,22 @@ int main(void)
     my_printf("\r\nConsole Ready!\r\n");
     my_printf("SYSCLK = %d Hz\r\n", SystemCoreClock);
 
+
+
     // Start Trace Recording
     xTraceEnable(TRC_START);
 
     // Create Semaphore
     S_Up = xSemaphoreCreateBinary();
+
+    for (int i = 0; i < TASK_NUM; i++) {
+        txSem[i] = xSemaphoreCreateBinary();
+        rxSem[i] = xSemaphoreCreateBinary();
+        taskSem[i] = xSemaphoreCreateBinary();
+        if ((txSem[i] == NULL) || (rxSem[i] == NULL) || (taskSem[i] == NULL)) {
+            my_printf("Falha ao criar semáforo %d\n", i);
+        }
+    }
     vTraceSetSemaphoreName(S_Up, "S_Up");
     xCommandeQueue = xQueueCreate(MAX_SUBSCRIBERS, sizeof(commande_message_t));
 
@@ -137,6 +153,14 @@ void vTaskUp(void *pvParameters)
 		xSemaphoreTake(sems[CARTONENVOYE], portMAX_DELAY);
 		my_printf("Segunda caixa livre\r\n");
 
+		// Sinaliza que a vTaskUp concluiu seu ciclo e que a vTaskUpDos pode iniciar
+		my_printf("vTaskUp: ciclo concluído. Sinalizando vTaskUpDos...\r\n");
+		xSemaphoreGive(txSem[IDX_TASK_UP]); // Sinaliza para a task de índice 1
+
+		// Se desejar reiniciar o ciclo somente após a confirmação final (por exemplo, da vTask_Palette)
+		my_printf("vTaskUp: aguardando confirmação do ciclo completo...\r\n");
+		xSemaphoreTake(rxSem[IDX_TASK_PALETTE], portMAX_DELAY);
+
     }
 }
 
@@ -144,6 +168,10 @@ void vTaskUp(void *pvParameters)
 void vTaskUpDos(void *pvParameters){
 
 	while(1){
+        // Aguarda sinal de vTaskUp
+        my_printf("vTaskUpDos: aguardando sinal de vTaskUp...\r\n");
+        xSemaphoreTake(txSem[IDX_TASK_UP], portMAX_DELAY);
+
 		// Espera pelo sensor ENTREEPALETIZOR sair do estado 1 (primeira caixa no bloqueado)
 		my_printf("Esperando mudanca de estado do ENTREEPALETIZOR para 0 (primeira caixa no bloqueado)\r\n");
 		subscribe(ENTREEPALETIZOR, ENTREEPALETIZOR, 1);
@@ -174,7 +202,7 @@ void vTaskUpDos(void *pvParameters){
 		xSemaphoreTake(sems[ENTREEPALETIZOR], portMAX_DELAY);
 		my_printf("Segunda caixa fora bloqueado\r\n");
 
-		vTaskDelay(750);
+		vTaskDelay(450);
 		writing(1, BLOCAGE);
 		my_printf("Barreira levantada\r\n");
 
@@ -195,6 +223,10 @@ void vTaskUpDos(void *pvParameters){
 
 		writing(0, POUSSOIR);
 		writing(1, CARTON);
+
+        // Sinaliza que a vTaskUpDos concluiu seu ciclo e que a vTask_Palette pode iniciar
+        my_printf("vTaskUpDos: ciclo concluído. Sinalizando vTask_Palette...\r\n");
+        xSemaphoreGive(txSem[IDX_TASK_UPDOS]);
 	}
 }
 
@@ -203,21 +235,19 @@ void vTask_Palette (void *pvParameters)
 	// Read all states from the scene
 	FACTORY_IO_update();
 
+	writing(1, distribuition_palette);
+	writing(1, tapis_distribuition_palette);
+	writing(1, tapis_palette_vers_ascenseur);
+
+
 	while(1)
 	{
-		writing(1, distribuition_palette);
-		writing(1, tapis_distribuition_palette);
-		writing(1, tapis_palette_vers_ascenseur);
-
-		vTaskDelay(300);
-
-		writing(0, distribuition_palette);
+        // Aguarda sinal de vTaskUpDos
+        my_printf("vTask_Palette: aguardando sinal de vTaskUpDos...\r\n");
+        xSemaphoreTake(txSem[IDX_TASK_UPDOS], portMAX_DELAY);
 
 		subscribe(1, entree_palette, 0);
 		xSemaphoreTake(sems[entree_palette], portMAX_DELAY);
-
-		writing(0, tapis_distribuition_palette);
-		writing(0, tapis_palette_vers_ascenseur);
 		writing(1, charger_palette);
 
 		subscribe(1, sortie_palette, 0);
@@ -233,7 +263,7 @@ void vTask_Palette (void *pvParameters)
 
 		writing(0, monter_ascenseur);
 		writing(0, ascenseur_to_limit);
-
+		/*
 		//while(IsSensorActive(porte_ouverte)==1);
 		while(BSP_PB_GetState() == 0);
 
@@ -252,6 +282,11 @@ void vTask_Palette (void *pvParameters)
 		writing(0, ascenseur_to_limit);
 		writing(1, charger_palette);
 		writing(1, tapis_fin);
+		*/
+
+        // Ao finalizar seu ciclo, sinaliza para vTaskUp que pode iniciar um novo ciclo
+        my_printf("vTask_Palette: ciclo concluído. Sinalizando vTaskUp...\r\n");
+        xSemaphoreGive(rxSem[IDX_TASK_PALETTE]);
 	}
 }
 
